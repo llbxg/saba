@@ -7,10 +7,9 @@ def _501():
     return b'HTTP/1.1 501\r\n\r\n Not Implemented\n'
 
 class Saba():
-    def __init__(self, app):
-        self.host = '127.0.0.1'
-        self.port = 8000
-        self.max_accept = 50
+    def __init__(self, app, host = '127.0.0.1', port = 8000):
+        self.host = host
+        self.port = port
         self.request_queue_size = 5
         self.app = app
 
@@ -26,7 +25,7 @@ class Saba():
         # Wait for connection.
         self.s.listen(self.request_queue_size)
 
-    def parse_request(self,):
+    def parse_request(self):
         # Parse rquest
         self.method, self.path, others = self.request_data.decode('iso-8859-1').split(' ', 2)
         self.protocol , _ = others.split('\r\n', 1)
@@ -66,12 +65,15 @@ class Saba():
 
             # Receive data(maximum 4096 bytes).
             data = self.conn.recv(4096)# Blocking
+
             self.request_data += data
-            if len(data)<4096 :
+
+            if (len(data)<4096) or (not data):
                 break
-            elif not data:
-                break
-        
+
+        if self.request_data == b'':
+            return None
+
         self.parse_request()
 
         env = self.make_env()
@@ -85,20 +87,27 @@ class Saba():
             self.conn, _ = s.accept()
             env = self.handle_one_request()
 
-            #Create thread.
+            if env is None:
+                continue
+
+            # Create thread.
             thread = Thread(target=swimming, args=(self.conn, env, self.app), daemon=True)
 
-            #Start thread.
+            # Start thread.
             thread.start()
 
 #Loop handler.
 def swimming(conn, env, app):
+
     # Opne the conection.
     with conn:
         response_data = make_responce(env, app)
+
         conn.sendall(response_data)
 
+# Make responce.
 def make_responce(env, app):
+
     headers = []
     status_code = None
 
