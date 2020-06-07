@@ -1,16 +1,21 @@
 import socket
 from threading import Thread
 
+from http.client import responses
+
 import sys
 
 def _501():
-    return b'HTTP/1.1 501\r\n\r\n Not Implemented\n'
+    return 'HTTP/1.1 501 {0}\r\n\r\n {0}\n'.format(responses[501]).encode("utf-8")
+
+def _301(host, path):
+    return 'HTTP/1.1 301 {0}\r\nLocation:http://{1}{2}\r\n\r\n {0}\n'.format(responses[301], host, path[:-1]).encode("utf-8")
 
 class Saba():
     def __init__(self, app, host = '127.0.0.1', port = 8000):
         self.host = host
         self.port = port
-        self.request_queue_size = 5
+        self.request_queue_size = 50
         self.app = app
 
         # AF_INET : IPv4/ SOCK_STREAM : TCP/IP
@@ -27,13 +32,17 @@ class Saba():
 
     def parse_request(self):
         # Parse rquest
+
+        # (method, path, protocol) : request line / others : request header
         self.method, self.path, others = self.request_data.decode('iso-8859-1').split(' ', 2)
-        self.protocol , _ = others.split('\r\n', 1)
+        self.protocol, self.r_host, _ = others.split('\r\n', 2)
 
         if self.path in '?':
             self.path, self.query = self.path.split('?', 1)
         else:
             self.query=""
+
+        self.r_host = self.r_host.split(': ')[1]
 
     def make_env(self):
         env = {
@@ -58,6 +67,7 @@ class Saba():
         }
         return env
 
+    # Return status & env.
     def handle_one_request(self):
         self.request_data = b''
         # Loop until all data is received.
@@ -72,36 +82,43 @@ class Saba():
                 break
 
         if self.request_data == b'':
-            return None
+            return {'status':'501', 'env':None}
 
         self.parse_request()
 
         env = self.make_env()
 
-        return env
+        if len(self.path.split('/')) == 3 and self.path[-1] == '/':
+            return {'status':'301', 'env':env, 'host':self.r_host}
+
+        return {'status':'200', 'env':env}
 
     def keep_swimming(self):
         s = self.s
         while True:
             # When someone comes in, adds the connection and address.
             self.conn, _ = s.accept()
-            env = self.handle_one_request()
+            dic = self.handle_one_request()
 
-            if env is None:
+            if dic['env'] is None:
                 continue
 
             # Create thread.
-            thread = Thread(target=swimming, args=(self.conn, env, self.app), daemon=True)
+            thread = Thread(target=swimming, args=(self.conn, dic, self.app), daemon=True)
 
             # Start thread.
             thread.start()
 
 #Loop handler.
-def swimming(conn, env, app):
+def swimming(conn, dic, app):
+    env = dic['env']
 
     # Opne the conection.
     with conn:
         response_data = make_responce(env, app)
+
+        if dic['status']=='301':
+            response_data = _301(dic['host'], env['PATH_INFO'])
 
         conn.sendall(response_data)
 
