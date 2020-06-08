@@ -4,7 +4,7 @@ from threading import Thread
 from http.client import responses
 
 import sys
-from urllib.parse import unquote
+from urllib.parse import unquote, unquote_plus
 
 def _501():
     return 'HTTP/1.1 501 {0}\r\n\r\n {0}\n'.format(responses[501]).encode("utf-8")
@@ -36,7 +36,7 @@ class Saba():
 
         # (method, path, protocol) : request line / others : request header
         self.method, self.path, others = self.request_data.decode('iso-8859-1').split(' ', 2)
-        self.protocol, self.r_host, _ = others.split('\r\n', 2)
+        self.protocol, self.r_host, others = others.split('\r\n', 2)
 
         self.path = unquote(self.path)
 
@@ -46,6 +46,21 @@ class Saba():
             self.query=""
 
         self.r_host = self.r_host.split(': ')[1]
+
+        value_dic = {}
+        if self.method == 'POST':
+            _, post_value = others.split('\r\n\r\n')
+            post_value= unquote_plus(post_value)
+
+            try:
+                for post_v in post_value.split('&'):
+                    key, value = post_v.split('=', 1)
+                    value_dic[key]=value
+                value_dic['error'] = False
+            except:
+                value_dic['error'] = True
+
+        self.post_value = value_dic
 
     def make_env(self):
         env = {
@@ -67,6 +82,8 @@ class Saba():
         'wsgi.multithread': True,
         'wsgi.multiprocess': False,
         'wsgi.run_once': False,
+
+        'saba_post_value':self.post_value
         }
         return env
 
