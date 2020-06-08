@@ -12,6 +12,38 @@ def _501():
 def _301(host, path):
     return 'HTTP/1.1 301 {0}\r\nLocation:http://{1}{2}\r\n\r\n {0}\n'.format(responses[301], host, path[:-1]).encode("utf-8")
 
+def remove_w(l, w=['']):
+    return [a for a in l if a not in w]
+
+def make_formdata(others):
+    value_dic = {}
+
+    _, post_value = others.split('\r\n\r\n')
+    post_value= unquote_plus(post_value)
+    
+    try:
+        for post_v in post_value.split('&'):
+            key, value = post_v.split('=', 1)
+            value_dic[key]=value
+        value_dic['error'] = False
+    except:
+        value_dic['error'] = True
+
+    return value_dic
+
+def make_formdata_multi(others, val):
+    value_dic = {}
+
+    try:
+        _, post_value = others.split('\r\n\r\n',1)
+        value_dic['formdata'] = post_value
+        value_dic['boundary'] = val.split('=')[1]
+        value_dic['error'] = False
+    except:
+        value_dic['error'] = True
+
+    return value_dic
+
 class Saba():
     def __init__(self, app, host = '127.0.0.1', port = 8000):
         self.host = host
@@ -49,16 +81,14 @@ class Saba():
 
         value_dic = {}
         if self.method == 'POST':
-            _, post_value = others.split('\r\n\r\n')
-            post_value= unquote_plus(post_value)
-
-            try:
-                for post_v in post_value.split('&'):
-                    key, value = post_v.split('=', 1)
-                    value_dic[key]=value
-                value_dic['error'] = False
-            except:
-                value_dic['error'] = True
+            for o in remove_w(others.split('\r\n')):
+                if len(o := o.split(': '))==2:
+                    key, val = o
+                    if key=='Content-Type':
+                        if 'multipart/form-data' in val:
+                            value_dic = make_formdata_multi(others, val)
+                        elif val=='application/x-www-form-urlencoded':
+                            value_dic = make_formdata(others)
 
         self.post_value = value_dic
 
