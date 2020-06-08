@@ -4,6 +4,7 @@ from threading import Thread
 from http.client import responses
 
 import sys
+from urllib.parse import unquote
 
 def _501():
     return 'HTTP/1.1 501 {0}\r\n\r\n {0}\n'.format(responses[501]).encode("utf-8")
@@ -37,7 +38,9 @@ class Saba():
         self.method, self.path, others = self.request_data.decode('iso-8859-1').split(' ', 2)
         self.protocol, self.r_host, _ = others.split('\r\n', 2)
 
-        if self.path in '?':
+        self.path = unquote(self.path)
+
+        if '?' in self.path:
             self.path, self.query = self.path.split('?', 1)
         else:
             self.query=""
