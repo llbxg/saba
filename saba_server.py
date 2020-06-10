@@ -1,13 +1,14 @@
 import socket
 from threading import Thread
-
-from http.client import responses
-
 import sys
 from urllib.parse import unquote, unquote_plus
 
-def _501():
-    return 'HTTP/1.1 501 {0}\r\n\r\n {0}\n'.format(responses[501]).encode("utf-8")
+from http.client import responses
+
+import datetime
+
+def _500():
+    return 'HTTP/1.1 500 {0}\r\n\r\n {0}\n'.format(responses[500]).encode("utf-8")
 
 def _301(host, path):
     return 'HTTP/1.1 301 {0}\r\nLocation:http://{1}{2}\r\n\r\n {0}\n'.format(responses[301], host, path[:-1]).encode("utf-8")
@@ -51,18 +52,6 @@ class Saba():
         self.request_queue_size = 50
         self.app = app
 
-        # AF_INET : IPv4/ SOCK_STREAM : TCP/IP
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-        # Set some socket options.
-        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        # Specify 'IP address' and 'port'.
-        self.s.bind((self.host, self.port))
-
-        # Wait for connection.
-        self.s.listen(self.request_queue_size)
-
     def parse_request(self):
         # Parse rquest
 
@@ -92,6 +81,8 @@ class Saba():
 
         self.post_value = value_dic
 
+        print('{} {} {}'.format(datetime.datetime.now(), self.method, self.path), end=' ')
+
     def make_env(self):
         env = {
         'REQUEST_METHOD' : self.method,
@@ -118,13 +109,13 @@ class Saba():
         return env
 
     # Return status & env.
-    def handle_one_request(self):
+    def handle_one_request(self, conn):
         self.request_data = b''
         # Loop until all data is received.
         while True:
 
             # Receive data(maximum 4096 bytes).
-            data = self.conn.recv(4096)# Blocking
+            data = conn.recv(4096)# Blocking
 
             self.request_data += data
 
@@ -132,7 +123,7 @@ class Saba():
                 break
 
         if self.request_data == b'':
-            return {'status':'501', 'env':None}
+            return {'status':'500', 'env':None}
 
         self.parse_request()
 
@@ -144,20 +135,32 @@ class Saba():
         return {'status':'200', 'env':env}
 
     def keep_swimming(self):
-        s = self.s
-        while True:
-            # When someone comes in, adds the connection and address.
-            self.conn, _ = s.accept()
-            dic = self.handle_one_request()
 
-            if dic['env'] is None:
-                continue
+        # AF_INET : IPv4/ SOCK_STREAM : TCP/IP
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
-            # Create thread.
-            thread = Thread(target=swimming, args=(self.conn, dic, self.app), daemon=True)
+            # Set some socket options.
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-            # Start thread.
-            thread.start()
+            # Specify 'IP address' and 'port'.
+            s.bind((self.host, self.port))
+
+            # Wait for connection.
+            s.listen(self.request_queue_size)
+
+            while True:
+                # When someone comes in, adds the connection and address.
+                conn, _ = s.accept()
+                dic = self.handle_one_request(conn)
+
+                if dic['env'] is None:
+                    continue
+
+                # Create thread.
+                thread = Thread(target=swimming, args=(conn, dic, self.app), daemon=True)
+
+                # Start thread.
+                thread.start()
 
 #Loop handler.
 def swimming(conn, dic, app):
@@ -169,8 +172,9 @@ def swimming(conn, dic, app):
 
         if dic['status']=='301':
             response_data = _301(dic['host'], env['PATH_INFO'])
-
         conn.sendall(response_data)
+
+        print(response_data.decode('iso-8859-1').split('\r\n', 1)[0])
 
 # Make responce.
 def make_responce(env, app):
@@ -194,7 +198,7 @@ def make_responce(env, app):
     status_line = "HTTP/1.1 {}".format(status_code).encode("utf-8")
 
     if len(headers)==0 or status_code is None:
-        return _501()
+        return _500()
     else:
         headers = [f"{k}: {v}" for k, v in headers]
         headers.append('CONTENT_LENGTH: {}'.format(content_length))
