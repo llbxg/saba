@@ -11,7 +11,8 @@ def _500():
     return 'HTTP/1.1 500 {0}\r\n\r\n {0}\n'.format(responses[500]).encode("utf-8")
 
 def _301(host, path):
-    return 'HTTP/1.1 301 {0}\r\nLocation:http://{1}{2}\r\n\r\n {0}\n'.format(responses[301], host, path[:-1]).encode("utf-8")
+    print("{} {}".format(301, r:=responses[301]))
+    return 'HTTP/1.1 301 {0}\r\nLocation:http://{1}{2}\r\n\r\n {0}\n'.format(r, host, path[:-1]).encode("utf-8")
 
 def remove_w(l, w=['']):
     return [a for a in l if a not in w]
@@ -63,6 +64,10 @@ class Saba():
 
         if '?' in self.path:
             self.path, self.query = self.path.split('?', 1)
+            self.path = self.path+'/'
+            if self.query[-1] == '/':
+                self.query = self.query[:-1]
+
         else:
             self.query=""
 
@@ -91,7 +96,7 @@ class Saba():
         'QUERY_STRING' : self.query,
         'CONTENT_TYPE':'',
         'CONTENT_LENGTH':'',
-        'SERVER_NAME': socket.getfqdn(),
+        'SERVER_NAME': 'saba_server/beta',
         'SERVER_PORT': self.port,
         'SERVER_PROTOCOL':self.protocol,
         #HTTP_ Variables
@@ -168,13 +173,12 @@ def swimming(conn, dic, app):
 
     # Opne the conection.
     with conn:
-        response_data = make_responce(env, app)
-
         if dic['status']=='301':
             response_data = _301(dic['host'], env['PATH_INFO'])
-        conn.sendall(response_data)
+        else:
+            response_data = make_responce(env, app)
 
-        print(response_data.decode('iso-8859-1').split('\r\n', 1)[0])
+        conn.sendall(response_data)
 
 # Make responce.
 def make_responce(env, app):
@@ -186,6 +190,7 @@ def make_responce(env, app):
         nonlocal headers, status_code
         status_code = s
         headers = h
+        print(s)
 
     response_data = app(env, start_response)
 
