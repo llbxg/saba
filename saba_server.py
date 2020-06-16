@@ -74,6 +74,7 @@ class Saba():
         self.r_host = self.r_host.split(': ')[1]
 
         value_dic = {}
+        self.content_type = ''
         if self.method == 'POST':
             for o in remove_w(others.split('\r\n')):
                 if len(o := o.split(': '))==2:
@@ -83,6 +84,7 @@ class Saba():
                             value_dic = make_formdata_multi(others, val)
                         elif val=='application/x-www-form-urlencoded':
                             value_dic = make_formdata(others)
+                        self.content_type = val
 
         self.post_value = value_dic
 
@@ -94,7 +96,7 @@ class Saba():
         'SCRIPT_NAME' : '',
         'PATH_INFO' : self.path,
         'QUERY_STRING' : self.query,
-        'CONTENT_TYPE':'',
+        'CONTENT_TYPE':self.content_type,
         'CONTENT_LENGTH':'',
         'SERVER_NAME': 'saba_server/beta',
         'SERVER_PORT': self.port,
